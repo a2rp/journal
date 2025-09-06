@@ -5,12 +5,11 @@ import { Styled } from "./styled";
  *  Storage & Crypto helpers
  *  ------------------------- */
 const STORAGE_KEY = "journal.v1"; // { meta:{salt,iter,verifier:{iv,ct}}, data:{[date]:{iv,ct,updatedAt}} }
-const ITER = 120_000;             // PBKDF2 iterations (good balance for browsers)
+const ITER = 120_000;             // PBKDF2 iterations
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-// base64 helpers for ArrayBuffer/Uint8Array
 const bufToB64 = (buf) => {
     const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
     let binary = "";
@@ -30,7 +29,6 @@ const loadDB = () => {
 };
 const saveDB = (db) => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 
-const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 const todayISO = () => {
     const t = new Date();
     const yyyy = t.getFullYear();
@@ -41,7 +39,6 @@ const todayISO = () => {
 const fmtNice = (iso) =>
     new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
 
-// derive AES key from password + salt
 async function deriveKey(password, saltB64) {
     const salt = saltB64 ? b64ToBuf(saltB64) : crypto.getRandomValues(new Uint8Array(16)).buffer;
     const baseKey = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
@@ -78,16 +75,24 @@ export default function Journal() {
 
     // UI state
     const [selectedDate, setSelectedDate] = useState(todayISO());
-    const [entry, setEntry] = useState("");      // plaintext for selected date
+    const [entry, setEntry] = useState("");
     const [loadingEntry, setLoadingEntry] = useState(false);
     const [editPasswordOpen, setEditPasswordOpen] = useState(false);
-    const [busy, setBusy] = useState(false);     // disable buttons during long ops
+    const [busy, setBusy] = useState(false);
     const entriesCount = useMemo(() => Object.keys(db?.data || {}).length, [db]);
 
-    // confirm modal (reuse pattern)
+    // confirm modal
     const [confirm, setConfirm] = useState(null);
     const askConfirm = (opts) =>
-        setConfirm({ title: "Are you sure?", message: "", confirmText: "Confirm", cancelText: "Cancel", tone: "default", ...opts });
+        setConfirm({
+            title: "Are you sure?",
+            message: "",
+            confirmText: "Confirm",
+            cancelText: "Cancel",
+            tone: "default",
+            hideCancel: false,
+            ...opts,
+        });
     const handleConfirm = () => { const fn = confirm?.onConfirm; setConfirm(null); if (typeof fn === "function") fn(); };
     useEffect(() => {
         if (!confirm) return;
@@ -96,7 +101,7 @@ export default function Journal() {
         return () => document.removeEventListener("keydown", onKey);
     }, [confirm]);
 
-    // load entry whenever date or key/db changes
+    // load entry
     useEffect(() => {
         (async () => {
             if (!unlocked || !key) { setEntry(""); return; }
@@ -107,7 +112,6 @@ export default function Journal() {
                 const txt = await decryptString(key, rec.ct, rec.iv);
                 setEntry(txt);
             } catch {
-                // if decryption fails (rare), show placeholder
                 setEntry("[Decryption error]");
             } finally {
                 setLoadingEntry(false);
@@ -115,14 +119,12 @@ export default function Journal() {
         })();
     }, [selectedDate, unlocked, key, db]);
 
-    // persist db on change
+    // persist db
     useEffect(() => { if (db) saveDB(db); }, [db]);
 
     /** ----------- Auth flows ----------- */
-    // First time: set password
     const setupPassword = async (password) => {
         const { key, saltB64 } = await deriveKey(password);
-        // create a verifier ("ok")
         const verifier = await encryptString(key, "ok");
         const newDB = { meta: { salt: saltB64, iter: ITER, verifier }, data: {} };
         setDb(newDB);
@@ -130,7 +132,6 @@ export default function Journal() {
         setUnlocked(true);
     };
 
-    // Unlock with existing password
     const unlock = async (password) => {
         if (!db?.meta?.salt) throw new Error("Journal not initialized.");
         const { key } = await deriveKey(password, db.meta.salt);
@@ -145,28 +146,21 @@ export default function Journal() {
         }
     };
 
-    // Lock: forget key + clear plaintext
     const lock = () => {
         setKey(null);
         setUnlocked(false);
         setEntry("");
     };
 
-    // Change password (re-encrypt everything)
     const changePassword = async (newPassword) => {
         if (!unlocked || !key) return;
         setBusy(true);
         try {
-            // 1) decrypt every entry with old key
             const plainByDate = {};
             for (const [date, rec] of Object.entries(db.data || {})) {
-                try {
-                    plainByDate[date] = await decryptString(key, rec.ct, rec.iv);
-                } catch {
-                    plainByDate[date] = ""; // keep, but empty if corrupt
-                }
+                try { plainByDate[date] = await decryptString(key, rec.ct, rec.iv); }
+                catch { plainByDate[date] = ""; }
             }
-            // 2) derive new key + salt and re-encrypt
             const { key: newKey, saltB64 } = await deriveKey(newPassword);
             const newData = {};
             for (const [date, text] of Object.entries(plainByDate)) {
@@ -184,16 +178,39 @@ export default function Journal() {
         }
     };
 
+    /** ----------- Project reset (declare BEFORE use) ----------- */
+    function resetProjectStorage() {
+        askConfirm({
+            title: "Reset all journal data?",
+            message: "This clears all encrypted entries and settings from this browser. This cannot be undone.",
+            confirmText: "Erase & start fresh",
+            tone: "danger",
+            onConfirm: () => {
+                try { localStorage.removeItem(STORAGE_KEY); } catch { }
+                setDb(null);
+                setKey(null);
+                setUnlocked(false);
+                setEntry("");
+            },
+        });
+    }
+
     /** ----------- Entry actions ----------- */
     const saveEntry = async () => {
         if (!unlocked || !key) return;
-        const text = entry;
-        const encRec = await encryptString(key, text);
+        const encRec = await encryptString(key, entry);
         const next = {
             ...db,
             data: { ...(db?.data || {}), [selectedDate]: { ...encRec, updatedAt: Date.now() } },
         };
         setDb(next);
+
+        setConfirm({
+            title: "Saved",
+            message: `Entry for ${fmtNice(selectedDate)} saved.`,
+            confirmText: "OK",
+            hideCancel: true,
+        });
     };
 
     const deleteEntry = () => {
@@ -236,12 +253,14 @@ export default function Journal() {
 
                     <PasswordSetup onSubmit={setupPassword} />
                     <Styled.FooterNote>Data is encrypted in your browser. Keep your password safe.</Styled.FooterNote>
+
+                    {confirm && <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} onConfirm={handleConfirm} />}
                 </Styled.Container>
             </Styled.Page>
         );
     }
 
-    // 1) Locked view → prompt for password
+    // 1) Locked view
     if (!unlocked) {
         return (
             <Styled.Page>
@@ -254,7 +273,18 @@ export default function Journal() {
                     </Styled.Header>
 
                     <UnlockCard onUnlock={unlock} />
-                    <Styled.FooterNote>Forgot password? There is no recovery (zero-knowledge). You can reset by clearing localStorage.</Styled.FooterNote>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                        <Styled.DangerButton type="button" onClick={resetProjectStorage}>
+                            Reset storage (erase all)
+                        </Styled.DangerButton>
+                    </div>
+
+                    <Styled.FooterNote>
+                        Forgot password? There is no recovery (zero-knowledge). You can reset by clearing localStorage.
+                    </Styled.FooterNote>
+
+                    {confirm && <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} onConfirm={handleConfirm} />}
                 </Styled.Container>
             </Styled.Page>
         );
@@ -337,29 +367,7 @@ export default function Journal() {
 
                 <Styled.FooterNote>Zero-knowledge: your password/key never leaves the browser.</Styled.FooterNote>
 
-                {/* Confirm Modal */}
-                {confirm && (
-                    <Styled.ModalOverlay onClick={() => setConfirm(null)}>
-                        <Styled.ModalCard role="dialog" aria-modal="true" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()}>
-                            <Styled.ModalTitle id="confirm-title">{confirm.title}</Styled.ModalTitle>
-                            {confirm.message ? <Styled.ModalMessage>{confirm.message}</Styled.ModalMessage> : null}
-                            <Styled.ModalActions>
-                                <Styled.Button type="button" onClick={() => setConfirm(null)}>
-                                    {confirm.cancelText || "Cancel"}
-                                </Styled.Button>
-                                {confirm.tone === "danger" ? (
-                                    <Styled.DangerButton type="button" onClick={handleConfirm} autoFocus>
-                                        {confirm.confirmText || "Confirm"}
-                                    </Styled.DangerButton>
-                                ) : (
-                                    <Styled.PrimaryButton type="button" onClick={handleConfirm} autoFocus>
-                                        {confirm.confirmText || "Confirm"}
-                                    </Styled.PrimaryButton>
-                                )}
-                            </Styled.ModalActions>
-                        </Styled.ModalCard>
-                    </Styled.ModalOverlay>
-                )}
+                {confirm && <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} onConfirm={handleConfirm} />}
             </Styled.Container>
         </Styled.Page>
     );
@@ -368,6 +376,34 @@ export default function Journal() {
 /** -------------------------
  *  Subcomponents
  *  ------------------------- */
+
+function ConfirmModal({ confirm, onCancel, onConfirm }) {
+    return (
+        <Styled.ModalOverlay onClick={onCancel}>
+            <Styled.ModalCard role="dialog" aria-modal="true" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()}>
+                <Styled.ModalTitle id="confirm-title">{confirm.title}</Styled.ModalTitle>
+                {confirm.message ? <Styled.ModalMessage>{confirm.message}</Styled.ModalMessage> : null}
+                <Styled.ModalActions>
+                    {!confirm.hideCancel && (
+                        <Styled.Button type="button" onClick={onCancel}>
+                            {confirm.cancelText || "Cancel"}
+                        </Styled.Button>
+                    )}
+                    {confirm.tone === "danger" ? (
+                        <Styled.DangerButton type="button" onClick={onConfirm} autoFocus>
+                            {confirm.confirmText || "Confirm"}
+                        </Styled.DangerButton>
+                    ) : (
+                        <Styled.PrimaryButton type="button" onClick={onConfirm} autoFocus>
+                            {confirm.confirmText || "Confirm"}
+                        </Styled.PrimaryButton>
+                    )}
+                </Styled.ModalActions>
+            </Styled.ModalCard>
+        </Styled.ModalOverlay>
+    );
+}
+
 function PasswordSetup({ onSubmit }) {
     const [p1, setP1] = useState("");
     const [p2, setP2] = useState("");
