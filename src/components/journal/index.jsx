@@ -186,7 +186,7 @@ export default function Journal() {
             confirmText: "Erase & start fresh",
             tone: "danger",
             onConfirm: () => {
-                try { localStorage.removeItem(STORAGE_KEY); } catch { }
+                try { localStorage.removeItem(STORAGE_KEY); } catch { /* Storage may be unavailable. */ }
                 setDb(null);
                 setKey(null);
                 setUnlocked(false);

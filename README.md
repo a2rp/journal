@@ -1,60 +1,41 @@
-# Personal Journal / Diary (React + styled-components, AES-GCM)
+# Private Journal
 
-![alt text](image-1.png)
-![alt text](image-2.png)
-![alt text](image-3.png)
-
-**Live Demo:** https://a2rp.github.io/journal/
-
-A lightweight, frontend-only journal with **password protection**. Entries are **AES-GCM encrypted** in your browser using a key derived from your password (PBKDF2). Transparent UI that blends with a black/dark theme.
+A frontend-only journal built with React and styled-components. Entries are protected by a password and encrypted in the browser with AES-GCM before they are stored in LocalStorage.
 
 ## Features
 
--   Create, edit, delete **daily entries**
--   **Password lock/unlock** (no recovery)
--   **Client-side encryption** (AES-GCM, PBKDF2)
--   Change password (re-encrypts all entries locally)
--   Clear **ALL** entries (with confirm)
--   LocalStorage persistence
--   Custom confirm modal (no portals)
--   Dark/black theme friendly (no background overrides)
+- Create, edit, delete, and browse daily entries
+- Password setup, unlock, lock, and password change flow
+- Browser-side AES-GCM encryption with PBKDF2 key derivation
+- LocalStorage persistence with clear-all and reset controls
+- Responsive fixed header, icon-only footer links, and go-to-top button
 
-## Security (quick notes)
+## Tech stack
 
--   Your password is **never stored**; the derived key lives only in memory when unlocked.
--   Data at rest is encrypted in LocalStorage; clearing the browser/storage will remove it.
--   There is **no password recovery**. Keep your password safe.
+React, Vite, styled-components, Web Crypto API, and LocalStorage.
 
-## Local Install
+## Run locally
 
 ```bash
-# 1) Clone the repo
-git clone https://github.com/a2rp/journal.git
-cd journal
-
-# 2) Install dependencies
-npm i
-
-# 3) Run dev server
+npm install
 npm run dev
 ```
 
-## Links
+Build and deploy:
 
-- Portfolio: [https://www.ashishranjan.net](https://www.ashishranjan.net)
-- GitHub: [https://github.com/a2rp](https://github.com/a2rp)
-- CodePen: [https://codepen.io/ash1198](https://codepen.io/ash1198)
-- LinkedIn: [https://www.linkedin.com/in/aashishranjan](https://www.linkedin.com/in/aashishranjan)
-- Facebook: [https://www.facebook.com/theash.ashish/](https://www.facebook.com/theash.ashish/)
-- YouTube: [https://www.youtube.com/@ashishranjan-ashz?sub_confirmation=1](https://www.youtube.com/@ashishranjan-ashz?sub_confirmation=1)
-- Email: [ash.ranjan09@gmail.com](mailto:ash.ranjan09@gmail.com)
+```bash
+npm run lint
+npm run build
+npm run deploy
+```
 
-## Support
+## Screenshot
 
-- Support: [https://a2rp-donation-page.netlify.app/](https://a2rp-donation-page.netlify.app/)
-- Buy Me A Coffee: [https://buymeacoffee.com/a2rp](https://buymeacoffee.com/a2rp)
-- Patreon: [https://patreon.com/a2rp](https://patreon.com/a2rp)
-<!-- Project links -->
+![Private Journal screenshot](screenshot.png)
+
+## Security note
+
+The password is not stored and there is no recovery flow. Clearing browser storage removes the local journal data.
 
 ## Links
 

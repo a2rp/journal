@@ -1,4 +1,4 @@
-import styled, { css } from "styled-components";
+import styled from "styled-components";
 
 const border = "1px solid hsl(0 0% 100% / 0.14)";
 const borderMuted = "1px solid hsl(0 0% 100% / 0.10)";
@@ -11,7 +11,10 @@ export const Styled = {
     Container: styled.div`
         max-width: 980px;
         margin: 0 auto;
-        padding: 32px 18px 56px;
+        padding: 102px 18px 56px;
+        @media (width < 620px) {
+            padding-top: 92px;
+        }
     `,
     Header: styled.header`
         display: flex;
